@@ -7,7 +7,7 @@ A BIOL360 (Cell Biology) art project: an interactive, hand-drawn visualization o
 
 ## Live demo
 
-**[View the demo on GitHub Pages](https://sungminnkimm.github.io/gpcr_signaling_cascade/)**
+**View the demo on this address: [https://sungminnkimm.github.io/gpcr_signaling_cascade/](https://sungminnkimm.github.io/gpcr_signaling_cascade/)**
 
 No installation needed — it runs entirely in the browser. Just click the link above.
 
