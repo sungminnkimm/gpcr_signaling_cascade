@@ -4,35 +4,36 @@ This explains exactly what to change in `index.html` to resize, reposition, or r
 
 ## The core mechanism: `drawImg()`
 
-All protein art is drawn through one helper function (around line 273):
+All protein art is drawn through one helper function (around line 277):
 
 ```js
-function drawImg(img, cx, cy, targetH, glowColor, glowBlur)
+function drawImg(img, cx, cy, targetH, glowColor, glowBlur, flipX, angle)
 ```
 
 - `cx, cy` — the center point where the image is placed
 - `targetH` — the **height in pixels** the image is scaled to. Width is computed automatically to preserve the drawing's original aspect ratio.
 - `glowColor` / `glowBlur` — optional neon glow halo (leave `null`/omit for no glow)
+- `flipX` — pass `true` to mirror the image horizontally
+- `angle` — rotation in **radians** (`Math.PI` = 180°, `Math.PI/2` = 90°, `Math.PI/4` = 45°). Leave `0`/omit for no rotation.
 
-**To resize any protein, change its `targetH` number.** You never need to touch the PNG file itself.
+**To resize any protein, change its `targetH` number.** You never need to touch the PNG file itself. `flipX` and `angle` can be combined on the same call.
 
-There is currently no rotation parameter — every image is drawn upright, exactly as drawn. See [Orientation](#orientation--flipping) below for how to add rotation/flipping if needed.
-
-## Where each protein's size/position is set
+## Where each protein's size/position/orientation is set
 
 | Protein | Function | Line | What to edit |
 |---|---|---|---|
-| GPCR receptor (resting + active) | `drawGPCR` | 708 | `(bot-top)*4.2` — size is relative to membrane thickness, not a fixed pixel value |
-| Gα subunit (GDP/GTP) | `drawAlpha` | 751 | `52` — target height in px |
-| Gβ subunit | `drawBeta` | 757 | `40` |
-| Gγ subunit | `drawGamma` | 762 | `36` |
-| Adenylate Cyclase | `drawAC` | 797 | `(bot-top)*5.2` — relative to membrane thickness |
-| Adrenaline ligand | `drawLigands` | 832 | `16` |
-| cAMP messenger | `drawCamp` | 846 | `9` |
-| Phosphodiesterase (PDE) | `drawPDE` | 860 | `36` |
-| PKA regulatory (R) subunits | `drawPKA` | 876–877 | `36` (appears twice, one per R subunit) |
-| PKA catalytic (C) subunits, inactive | `drawPKA` | 878–879 | `36` (appears twice) |
-| Free catalytic PKA (active, pink) | `drawCatPKA` | 892 | `44` |
+| GPCR receptor (resting + active) | `drawGPCR` | 766 | `(bot-top)*4.5` — size is relative to membrane thickness, not a fixed pixel value |
+| Gα subunit (GDP/GTP) | `drawAlpha` | 809 | `150` — target height in px |
+| Gβ subunit | `drawBeta` | 815 | `150` |
+| Gγ subunit | `drawGamma` | 820 | `150` |
+| Adenylate Cyclase | `drawAC` | 855 | `(bot-top)*6` — relative to membrane thickness |
+| Glucagon ligand | `drawLigands` | 890 | `16` |
+| cAMP messenger (free-floating) | `drawCamp` | 904 | `9` |
+| cAMP messenger (docked on PKA) | `drawPKA` | 947 | `14` |
+| Phosphodiesterase (PDE) | `drawPDE` | 918 | `36` |
+| PKA regulatory (R) subunits | `drawPKA` | 935–936 | `72` (appears twice, one per R subunit). The right-hand one (936) also passes `flipX=true` to mirror it |
+| PKA catalytic (C) subunits, inactive | `drawPKA` | 937–938 | `72` (appears twice). Both pass `angle=Math.PI` (180° rotation); the right-hand one (938) also passes `flipX=true` |
+| Free catalytic PKA (active, pink) | `drawCatPKA` | 960 | `72`, with `angle=Math.PI/2` (90° rotation) |
 
 ### Why GPCR and AC use `(bot-top)*N` instead of a fixed number
 
@@ -40,20 +41,25 @@ The membrane band's thickness (`bot-top`) scales with the browser window size, s
 
 ## Position offsets
 
-Some proteins are drawn at an offset from a parent anchor point rather than at `cx, cy` directly — e.g. β and γ flank the GPCR's α subunit:
+Some proteins are drawn at an offset from a parent anchor point rather than at `cx, cy` directly — e.g. β and γ sit near the GPCR's α subunit:
 
 ```js
-// inside drawGPCR (~line 736)
-drawBeta(g.x-12, gy);
-drawGamma(g.x+12, gy);
-drawAlpha(g.x, gy-10, gp.nucleotide);
+// inside drawGPCR (~line 793)
+if(gp.attached){
+  drawBeta(g.x+35, gy+15);
+  drawGamma(g.x+35, gy+15);
+  drawAlpha(g.x+7, gy+10, gp.nucleotide);
+} else {
+  drawBeta(g.x+50, gy+15);
+  drawGamma(g.x+50, gy+15);
+}
 ```
 
-The `-12`, `+12`, `-10` numbers are pixel offsets from the GPCR's anchor point (`g.x`, `gy`). Increase the magnitude to spread the subunits further apart; decrease to cluster them tighter. Same pattern applies to the four PKA subunits in `drawPKA` (offsets of `-9`/`+9` and `-7`/`+7`).
+The `+35`, `+7`, `+50`, `+15`, `+10` numbers are pixel offsets from the GPCR's anchor point (`g.x`, `gy`). Adjust them to reposition the subunits relative to the receptor. Same pattern applies to the four PKA subunits in `drawPKA` (offsets of `-9`/`+9`, `-8`/`+8`, `-6`/`-7`) and to the four cAMP docking slots a few lines below (`CAMP_SLOTS` array).
 
 ## Vertical placement relative to the membrane
 
-The GPCR and G-protein vertical position is computed near the top of `drawGPCR` (~line 701):
+The GPCR and G-protein vertical position is computed near the top of `drawGPCR` (~line 759):
 
 ```js
 const top = H*REGION.membraneTop, bot = H*REGION.membraneBot;
@@ -65,11 +71,33 @@ const gy = bot + halfThickness + 16 + Math.sin(gp.bobPhase)*2;  // G-protein cen
 
 To raise/lower the GPCR or G-protein relative to the membrane, adjust the `+ halfThickness` term or the trailing `+ 16` — these are added pixel offsets, not scale factors.
 
-## Orientation / flipping
+The overall membrane/cytoplasm/nucleus split is controlled separately by the `REGION` object near the top of the script (~line 329):
 
-There's no rotation support yet. If you need a protein mirrored (e.g. so it visually "leans" the direction it's sliding) or rotated:
+```js
+const REGION = {
+  membraneTop: 0.18,
+  membraneBot: 0.245,
+  cytoTop: 0.245,
+  cytoBot: 0.84,
+  nucleusTop: 0.84
+};
+```
 
-1. Wrap the `drawImg` call in `sctx.save()` / `sctx.translate(cx,cy)` / `sctx.scale(-1,1)` (mirror) or `sctx.rotate(angle)`, then call `drawImg` with `cx=0, cy=0`, then `sctx.restore()`.
-2. Alternatively, extend `drawImg` itself to accept an `angle` parameter and call `sctx.rotate(angle)` before `sctx.drawImage(...)` — cleaner if multiple proteins need rotation.
+Each value is a fraction of the canvas height. Shrinking the gap between two of these values shrinks that region; the freed fraction needs to go somewhere else in the list to keep the total at 1.0.
 
-Ask the assistant to make this change if/when a specific protein needs to rotate or flip; it's a small, localized edit once you know which protein and what triggers the rotation (e.g. direction of travel).
+## Orientation / flipping / rotation
+
+Both are supported directly on `drawImg` now — no extra wrapping needed:
+
+```js
+// mirror horizontally
+drawImg(img, x, y, targetH, null, null, true);
+
+// rotate 90°
+drawImg(img, x, y, targetH, null, null, false, Math.PI/2);
+
+// mirror AND rotate 180°
+drawImg(img, x, y, targetH, null, null, true, Math.PI);
+```
+
+Internally, `drawImg` translates to `(cx, cy)`, applies `rotate(angle)` then `scale(-1,1)` if flipping, and draws the image centered on the new origin — so rotation and flip can be combined safely in either order. If a new protein needs to face a particular direction (e.g. lean the way it's traveling), pass an `angle` computed from its velocity (`Math.atan2(vy, vx)`) instead of a fixed constant.
