@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPCR Signaling Cascade — Live Cell Simulation</title>
+<style>
+  :root{
+    --bg: #050810;
+    --membrane: #1a2a4a;
+    --cytoplasm: #060b16;
+    --nucleus: #0a1428;
+    --neon-cyan: #4df3ff;
+    --neon-green: #6dffb0;
+    --neon-orange: #ff9d3d;
+    --neon-pink: #ff3dc4;
+    --neon-gold: #ffd76a;
+    --panel-bg: rgba(20,28,46,0.55);
+    --panel-border: rgba(120,200,255,0.25);
+    --text-dim: #9fb4d0;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background: var(--bg);
+    overflow:hidden;
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    color:#e6f1ff;
+  }
+  #app{
+    position:relative;
+    width:100vw; height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  #scene{
+    width:100%;
+    height:78vh;
+    display:block;
+    cursor: crosshair;
+  }
+  #chartWrap{
+    width:100%;
+    height:22vh;
+    position:relative;
+    border-top: 1px solid rgba(120,200,255,0.15);
+    background: linear-gradient(to bottom, rgba(10,16,30,0.9), rgba(4,7,14,0.98));
+  }
+  #chart{
+    width:100%;
+    height:100%;
+    display:block;
+  }
+  .title{
+    position:absolute;
+    top:14px; left:18px;
+    z-index:5;
+    pointer-events:none;
+  }
+  .title h1{
+    margin:0;
+    font-size:17px;
+    font-weight:600;
+    letter-spacing:0.5px;
+    color:#d9ecff;
+    text-shadow: 0 0 12px rgba(80,180,255,0.5);
+  }
+  .title p{
+    margin:4px 0 0;
+    font-size:12px;
+    color:var(--text-dim);
+  }
+  #panel{
+    position:absolute;
+    top:14px; right:16px;
+    width:250px;
+    z-index:6;
+    background: var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:14px;
+    padding:14px 16px 12px;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  #panel h2{
+    margin:0 0 10px;
+    font-size:12px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color: var(--neon-cyan);
+    font-weight:600;
+  }
+  .ctrl{ margin-bottom:10px; }
+  .ctrl label{
+    display:flex;
+    justify-content:space-between;
+    font-size:11.5px;
+    color:var(--text-dim);
+    margin-bottom:4px;
+  }
+  .ctrl label span.val{ color:#cfe9ff; font-weight:600; }
+  input[type=range]{
+    width:100%;
+    height:4px;
+    -webkit-appearance:none;
+    appearance:none;
+    background: linear-gradient(90deg, rgba(80,160,255,0.5), rgba(120,200,255,0.15));
+    border-radius:4px;
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:13px; height:13px;
+    border-radius:50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan);
+    cursor:pointer;
+    border:none;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:13px; height:13px;
+    border-radius:50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan);
+    cursor:pointer;
+    border:none;
+  }
+  #meterBox{
+    position:absolute;
+    bottom:23vh;
+    right:16px;
+    z-index:6;
+    width:170px;
+    background: var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:12px;
+    padding:10px 14px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  #meterBox .lbl{
+    font-size:10.5px;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin-bottom:6px;
+  }
+  #meterTrack{
+    width:100%;
+    height:8px;
+    border-radius:6px;
+    background: rgba(255,255,255,0.08);
+    overflow:hidden;
+  }
+  #meterFill{
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg, #ffd76a, #ff8a3d);
+    box-shadow: 0 0 10px #ffae42;
+    transition: width 0.15s linear;
+  }
+  #overlayText{
+    position:absolute;
+    top:0; left:0; width:100%; height:78vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+    z-index:8;
+    opacity:0;
+    text-align:center;
+  }
+  #overlayText .box{
+    font-size: clamp(16px, 2.6vw, 32px);
+    font-weight:700;
+    letter-spacing:2px;
+    color:#fff7e0;
+    text-shadow:
+      0 0 10px #ffd76a,
+      0 0 30px #ff9d3d,
+      0 0 60px #ff9d3d;
+    padding: 18px 36px;
+    border:1px solid rgba(255,215,106,0.5);
+    border-radius:10px;
+    background: rgba(15,10,5,0.35);
+    backdrop-filter: blur(6px);
+  }
+  .hint{
+    position:absolute;
+    bottom:8px; left:18px;
+    z-index:5;
+    font-size:11px;
+    color: rgba(150,180,210,0.6);
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="title">
+    <h1>GPCR Signaling Cascade — Liver</h1>
+    <p>Glucagon &rarr; G&alpha;s &rarr; Adenylate Cyclase &rarr; cAMP &rarr; PKA &rarr; CREB &rarr; Glycogen Breakdown</p>
+  </div>
+
+  <div id="panel">
+    <h2>Pathway Controls</h2>
+    <div class="ctrl">
+      <label>Glucagon Dosage <span class="val" id="vDose">3</span></label>
+      <input type="range" id="dose" min="1" max="10" value="3" step="1">
+    </div>
+    <div class="ctrl">
+      <label>Adenylate Cyclase Efficiency <span class="val" id="vAC">5</span></label>
+      <input type="range" id="acEff" min="1" max="10" value="5" step="1">
+    </div>
+    <div class="ctrl">
+      <label>Phosphodiesterase (PDE) Activity <span class="val" id="vPDE">5</span></label>
+      <input type="range" id="pde" min="1" max="10" value="5" step="1">
+    </div>
+    <div class="ctrl">
+      <label>PKA Density <span class="val" id="vPkaDensity">8</span></label>
+      <input type="range" id="pkaDensity" min="3" max="20" value="8" step="1">
+    </div>
+  </div>
+
+  <div id="meterBox">
+    <div class="lbl">Transcription Meter (CREB)</div>
+    <div id="meterTrack"><div id="meterFill"></div></div>
+  </div>
+
+  <div id="overlayText"><div class="box">CELLULAR RESPONSE:<br>GLYCOGEN BREAKDOWN INITIATED</div></div>
+
+  <canvas id="scene"></canvas>
+  <div class="hint">Click above the membrane to release glucagon ligands &middot; drag a PKA tetramer in the cytoplasm to reposition it</div>
+
+  <div id="chartWrap"><canvas id="chart"></canvas></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const scene = document.getElementById('scene');
+  const sctx = scene.getContext('2d');
+  const chart = document.getElementById('chart');
+  const cctx = chart.getContext('2d');
+  const overlay = document.getElementById('overlayText');
+  const meterFill = document.getElementById('meterFill');
+
+  let W=0,H=0, CW=0, CH=0, DPR = Math.min(window.devicePixelRatio||1, 2);
+
+  // ---------- hand-drawn protein art (graceful fallback to vector shapes) ----------
+  const ASSET_PATH = 'assets/proteins/';
+  function loadImg(name){
+    const img = new Image();
+    img.src = ASSET_PATH+name+'.png';
+    return img;
+  }
+  const IMAGES = {
+    gpcr: loadImg('gpcr'),
+    gpcr_active: loadImg('gpcr_active'),
+    subunit_alpha: loadImg('subunit_alpha'),
+    subunit_alpha_gtp: loadImg('subunit_alpha_gtp'),
+    subunit_beta: loadImg('subunit_beta'),
+    subunit_gamma: loadImg('subunit_gamma'),
+    adenylate_cyclase: loadImg('adenylate_cyclase'),
+    adenylate_cyclase_active: loadImg('adenylate_cyclase_active'),
+    pka_regulatory: loadImg('pka_regulatory'),
+    pka_catalytic: loadImg('pka_catalytic'),
+    pka_catalytic_active: loadImg('pka_catalytic_active'),
+    ligand_glucagon: loadImg('ligand_glucagon'),
+    camp: loadImg('camp'),
+    pde: loadImg('pde')
+  };
+  function imgReady(img){ return img && img.complete && img.naturalWidth > 0; }
+  // draws an image centered at (cx,cy) scaled to targetH, preserving aspect ratio; returns false if not loaded
+  function drawImg(img, cx, cy, targetH, glowColor, glowBlur, flipX, angle){
+    if(!imgReady(img)) return false;
+    const aspect = img.naturalWidth/img.naturalHeight;
+    const h = targetH, w = targetH*aspect;
+    sctx.save();
+    if(glowColor){ sctx.shadowColor = glowColor; sctx.shadowBlur = glowBlur||10; }
+    if(flipX || angle){
+      sctx.translate(cx, cy);
+      if(angle) sctx.rotate(angle);
+      if(flipX) sctx.scale(-1, 1);
+      sctx.drawImage(img, -w/2, -h/2, w, h);
+    } else {
+      sctx.drawImage(img, cx-w/2, cy-h/2, w, h);
+    }
+    sctx.shadowBlur = 0;
+    sctx.restore();
+    return true;
+  }
+
+  function resize(){
+    const wrapRect = scene.getBoundingClientRect();
+    W = wrapRect.width; H = wrapRect.height;
+    scene.width = W*DPR; scene.height = H*DPR;
+    sctx.setTransform(DPR,0,0,DPR,0,0);
+
+    const cRect = chart.getBoundingClientRect();
+    CW = cRect.width; CH = cRect.height;
+    chart.width = CW*DPR; chart.height = CH*DPR;
+    cctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+
+  // ---------- sliders ----------
+  const doseEl = document.getElementById('dose');
+  const acEl = document.getElementById('acEff');
+  const pdeEl = document.getElementById('pde');
+  const vDose = document.getElementById('vDose');
+  const vAC = document.getElementById('vAC');
+  const vPDE = document.getElementById('vPDE');
+  const pkaDensityEl = document.getElementById('pkaDensity');
+  const vPkaDensity = document.getElementById('vPkaDensity');
+  let DOSE = +doseEl.value, AC_EFF = +acEl.value, PDE_ACT = +pdeEl.value, PKA_DENSITY = +pkaDensityEl.value;
+  doseEl.addEventListener('input', ()=>{ DOSE = +doseEl.value; vDose.textContent = DOSE; });
+  acEl.addEventListener('input', ()=>{ AC_EFF = +acEl.value; vAC.textContent = AC_EFF; });
+  pdeEl.addEventListener('input', ()=>{ PDE_ACT = +pdeEl.value; vPDE.textContent = PDE_ACT; });
+  pkaDensityEl.addEventListener('input', ()=>{
+    PKA_DENSITY = +pkaDensityEl.value;
+    vPkaDensity.textContent = PKA_DENSITY;
+    setPkaDensity(PKA_DENSITY);
+  });
+
+  // ---------- layout regions (fractions of H) ----------
+  const REGION = {
+    membraneTop: 0.18,
+    membraneBot: 0.245,
+    cytoTop: 0.245,
+    cytoBot: 0.84,
+    nucleusTop: 0.84
+  };
+
+  function rnd(a,b){ return a + Math.random()*(b-a); }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+  function dist2(x1,y1,x2,y2){ const dx=x1-x2, dy=y1-y2; return dx*dx+dy*dy; }
+
+  // =====================================================================
+  // Entities
+  // =====================================================================
+
+  // ---- GPCRs (7-TM wavy receptors embedded in membrane) ----
+  const GPCR_X_FRAC = [0.12, 0.34, 0.66, 0.88];
+  let gpcrs = [];
+  function initGPCRs(){
+    gpcrs = GPCR_X_FRAC.map((fx,i)=>({
+      x: fx*W,
+      glow: 0,
+      cooldown: 0,
+      gProtein: makeGProtein(fx*W, i)
+    }));
+  }
+
+  function makeGProtein(x, idx){
+    return {
+      anchorX: x,
+      idx,
+      attached: true,   // alpha attached to beta-gamma
+      nucleotide: 'GDP', // GDP or GTP
+      bobPhase: rnd(0, Math.PI*2)
+    };
+  }
+
+  // free-floating activated alpha subunits sliding toward AC, or returning
+  let freeAlphas = []; // {x,y,vx,gp, phase:'toAC'|'returning', hydroT}
+
+  // ---- Adenylate cyclase ----
+  let AC = null;
+  function initAC(){
+    AC = { x: 0.5*W, glow:0, activeTimer:0 };
+  }
+
+  // ---- ligands ----
+  let ligands = []; // {x,y,vy}
+
+  // ---- cAMP particles ----
+  let camp = []; // {x,y,vx,vy,life,alpha}
+
+  // ---- PDE particles (ambient cleanup) ----
+  let pdes = [];
+  function initPDEs(){
+    pdes = [];
+    for(let i=0;i<10;i++){
+      pdes.push({
+        x: rnd(W*0.08,W*0.92),
+        y: rnd(H*REGION.cytoTop+20, H*REGION.cytoBot-20),
+        vx: rnd(-0.25,0.25),
+        vy: rnd(-0.25,0.25)
+      });
+    }
+  }
+
+  // ---- PKA tetramers ----
+  let pkas = [];
+  function spawnPKA(){
+    return {
+      x: rnd(W*0.1, W*0.9),
+      y: rnd(H*(REGION.cytoTop+0.05), H*(REGION.cytoBot-0.08)),
+      vx: rnd(-0.15,0.15),
+      vy: rnd(-0.1,0.15),
+      hits: 0,
+      broken:false,
+      breakT:0
+    };
+  }
+  function initPKAs(){
+    pkas = [];
+    for(let i=0;i<PKA_DENSITY;i++) pkas.push(spawnPKA());
+  }
+  function setPkaDensity(target){
+    while(pkas.length < target) pkas.push(spawnPKA());
+    while(pkas.length > target){
+      let idx = pkas.length-1;
+      if(pkas[idx] === draggingPKA) idx = pkas.length-2;
+      if(idx < 0) break;
+      pkas.splice(idx,1);
+    }
+  }
+
+  // ---- PKA drag-and-drop ----
+  let draggingPKA = null;
+  let dragOffX = 0, dragOffY = 0;
+
+  // ---- catalytic PKA released, heading to nucleus ----
+  let catPKAs = []; // {x,y,vy}
+
+  // ---- mRNA golden strands (climax) ----
+  let strands = [];
+
+  // ---- transcription meter ----
+  let meter = 0;
+  let climaxActive = false;
+  let climaxT = 0;
+
+  // ---- cAMP concentration history for chart ----
+  let history = [];
+  const HISTORY_MAX = 240;
+
+  function resetAll(){
+    initGPCRs();
+    initAC();
+    ligands = [];
+    camp = [];
+    initPDEs();
+    initPKAs();
+    catPKAs = [];
+    freeAlphas = [];
+    strands = [];
+    meter = 0;
+    history = [];
+  }
+
+  // =====================================================================
+  // Input
+  // =====================================================================
+  scene.addEventListener('click', (e)=>{
+    const rect = scene.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if(y < H*REGION.membraneTop){
+      for(let i=0;i<DOSE;i++){
+        ligands.push({
+          x: x + rnd(-25,25),
+          y: y + rnd(-10,5),
+          vy: rnd(1.4,2.2)
+        });
+      }
+    }
+  });
+
+  // drag a PKA tetramer to manually reposition it in the cytoplasm
+  scene.addEventListener('mousedown', (e)=>{
+    const rect = scene.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    let nearest = null, nearestD = 900; // ~30px pick radius
+    for(const pk of pkas){
+      if(pk.broken) continue;
+      const d = dist2(x,y,pk.x,pk.y);
+      if(d < nearestD){ nearestD = d; nearest = pk; }
+    }
+    if(nearest){
+      draggingPKA = nearest;
+      dragOffX = nearest.x - x;
+      dragOffY = nearest.y - y;
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!draggingPKA) return;
+    const rect = scene.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    draggingPKA.x = clamp(x+dragOffX, W*0.05, W*0.95);
+    draggingPKA.y = clamp(y+dragOffY, H*REGION.cytoTop+20, H*REGION.cytoBot-20);
+  });
+  window.addEventListener('mouseup', ()=>{ draggingPKA = null; });
+
+  // =====================================================================
+  // Update
+  // =====================================================================
+  function update(dt){
+    const membraneY = H*(REGION.membraneTop+REGION.membraneBot)/2;
+    const halfThickness = H*(REGION.membraneBot-REGION.membraneTop)/2;
+    const cytoTopY = H*REGION.cytoTop;
+    const cytoBotY = H*REGION.cytoBot;
+    const nucleusTopY = H*REGION.nucleusTop;
+
+    // ligands fall
+    for(let i=ligands.length-1;i>=0;i--){
+      const l = ligands[i];
+      l.y += l.vy*dt*0.06;
+      let consumed=false;
+      if(l.y >= membraneY-14 && l.y <= membraneY+14){
+        for(const g of gpcrs){
+          if(g.cooldown<=0 && Math.abs(l.x-g.x) < 22){
+            activateGPCR(g);
+            consumed = true;
+            break;
+          }
+        }
+      }
+      if(consumed || l.y > membraneY+30) ligands.splice(i,1);
+    }
+
+    // gpcr glow decay + cooldown
+    for(const g of gpcrs){
+      g.glow = Math.max(0, g.glow - 0.01*dt);
+      g.cooldown = Math.max(0, g.cooldown - dt);
+      g.gProtein.bobPhase += 0.0015*dt;
+    }
+
+    // free alphas movement
+    for(let i=freeAlphas.length-1;i>=0;i--){
+      const a = freeAlphas[i];
+      if(a.phase === 'toAC'){
+        const dx = AC.x - a.x;
+        a.x += Math.sign(dx) * Math.min(Math.abs(dx), 1.0*dt);
+        a.y = membraneY + halfThickness + 16 + Math.sin(a.x*0.05)*2;
+        if(Math.abs(dx) < 3){
+          activateAC();
+          a.phase = 'hydrolyzing';
+          a.hydroT = rnd(1800, 2800);
+        }
+      } else if(a.phase === 'hydrolyzing'){
+        a.hydroT -= dt;
+        if(a.hydroT <= 0){
+          a.phase = 'returning';
+        }
+      } else if(a.phase === 'returning'){
+        const gp = gpcrs[a.gpIdx].gProtein;
+        const dx = gp.anchorX - a.x;
+        a.x += Math.sign(dx) * Math.min(Math.abs(dx), 1.0*dt);
+        a.y = membraneY + halfThickness + 16;
+        if(Math.abs(dx) < 3){
+          gp.attached = true;
+          gp.nucleotide = 'GDP';
+          freeAlphas.splice(i,1);
+        }
+      }
+    }
+
+    // AC glow + cAMP spawning
+    if(AC.activeTimer > 0){
+      AC.activeTimer -= dt;
+      AC.glow = Math.min(1, AC.glow + 0.02*dt);
+      const spawnChance = (AC_EFF/10) * (dt/16);
+      if(Math.random() < spawnChance*2.2){
+        const n = 1 + Math.floor(AC_EFF/4);
+        for(let k=0;k<n;k++){
+          camp.push({
+            x: AC.x + rnd(-8,8),
+            y: membraneY + rnd(6,14),
+            vx: rnd(-0.35,0.35),
+            vy: rnd(0.5,1.0),
+            life: 1
+          });
+        }
+      }
+    } else {
+      AC.glow = Math.max(0, AC.glow - 0.01*dt);
+    }
+
+    // cAMP movement
+    for(let i=camp.length-1;i>=0;i--){
+      const c = camp[i];
+      c.vy += 0.0006*dt;
+      c.x += c.vx*dt*0.06;
+      c.y += c.vy*dt*0.06;
+      c.x = clamp(c.x, W*0.03, W*0.97);
+      let removed=false;
+
+      // collide with PDE (degradation)
+      for(const p of pdes){
+        if(dist2(c.x,c.y,p.x,p.y) < 380){
+          if(Math.random() < (PDE_ACT/10)*0.18){
+            removed = true; break;
+          }
+        }
+      }
+
+      // collide with PKA tetramer
+      if(!removed){
+        for(const pk of pkas){
+          if(!pk.broken && dist2(c.x,c.y,pk.x,pk.y) < 360){
+            pk.hits++;
+            removed = true;
+            if(pk.hits >= 4){
+              breakPKA(pk);
+            }
+            break;
+          }
+        }
+      }
+
+      if(removed || c.y > cytoBotY-4){
+        camp.splice(i,1);
+      }
+    }
+
+    // PDE ambient drift
+    for(const p of pdes){
+      p.x += p.vx*dt*0.06;
+      p.y += p.vy*dt*0.06;
+      if(p.x < W*0.05 || p.x > W*0.95) p.vx *= -1;
+      if(p.y < cytoTopY+10 || p.y > cytoBotY-10) p.vy *= -1;
+    }
+
+    // PKA drift + respawn after break
+    for(let i=pkas.length-1;i>=0;i--){
+      const pk = pkas[i];
+      if(pk.broken){
+        pk.breakT -= dt;
+        if(pk.breakT <= 0){
+          pkas.splice(i,1);
+          pkas.push(spawnPKA());
+        }
+        continue;
+      }
+      if(pk === draggingPKA) continue;
+      pk.x += pk.vx*dt*0.06;
+      pk.y += pk.vy*dt*0.06;
+      if(pk.x < W*0.08 || pk.x > W*0.92) pk.vx *= -1;
+      if(pk.y < cytoTopY+30 || pk.y > cytoBotY-40) pk.vy *= -1;
+    }
+
+    // catalytic PKA heading to nucleus
+    for(let i=catPKAs.length-1;i>=0;i--){
+      const c = catPKAs[i];
+      c.x += c.vx*dt*0.06;
+      c.y += c.vy*dt*0.06;
+      if(c.y >= nucleusTopY+14){
+        catPKAs.splice(i,1);
+        if(!climaxActive){
+          meter = Math.min(100, meter + 9);
+          if(meter >= 100){
+            triggerClimax();
+          }
+        }
+      }
+    }
+
+    // climax strands
+    if(climaxActive){
+      climaxT -= dt;
+      for(let i=strands.length-1;i>=0;i--){
+        const s = strands[i];
+        s.y -= s.vy*dt*0.06;
+        s.life -= 0.0006*dt;
+        if(s.life <= 0 || s.y < cytoTopY-20) strands.splice(i,1);
+      }
+      if(climaxT <= 0 && strands.length===0){
+        climaxActive = false;
+        meter = 0;
+      }
+    }
+
+    // history sample for chart
+    history.push(camp.length);
+    if(history.length > HISTORY_MAX) history.shift();
+
+    meterFill.style.width = meter+'%';
+  }
+
+  function activateGPCR(g){
+    g.glow = 1;
+    g.cooldown = 600;
+    if(g.gProtein.attached){
+      g.gProtein.attached = false;
+      g.gProtein.nucleotide = 'GTP';
+      freeAlphas.push({
+        x: g.x, y: 0, gpIdx: gpcrs.indexOf(g),
+        phase: 'toAC'
+      });
+    }
+  }
+
+  function activateAC(){
+    AC.activeTimer = 1400;
+  }
+
+  function breakPKA(pk){
+    pk.broken = true;
+    pk.breakT = 900;
+    catPKAs.push({ x: pk.x-14, y: pk.y, vx: rnd(-0.1,0.1), vy: rnd(0.9,1.3) });
+    catPKAs.push({ x: pk.x+14, y: pk.y, vx: rnd(-0.1,0.1), vy: rnd(0.9,1.3) });
+  }
+
+  function triggerClimax(){
+    climaxActive = true;
+    climaxT = 3200;
+    const nucleusTopY = H*REGION.nucleusTop;
+    const n = 12;
+    for(let i=0;i<n;i++){
+      strands.push({
+        x: rnd(W*0.25, W*0.75),
+        y: nucleusTopY + rnd(10,40),
+        amp: rnd(8,18),
+        freq: rnd(0.02,0.04),
+        phaseOff: rnd(0,Math.PI*2),
+        vy: rnd(0.7,1.3),
+        life: 1
+      });
+    }
+    overlay.style.transition = 'opacity 0.6s ease';
+    overlay.style.opacity = '1';
+    setTimeout(()=>{ overlay.style.opacity = '0'; }, 2400);
+  }
+
+  // =====================================================================
+  // Draw
+  // =====================================================================
+  function drawMembrane(){
+    const top = H*REGION.membraneTop, bot = H*REGION.membraneBot;
+    const grad = sctx.createLinearGradient(0,top,0,bot);
+    grad.addColorStop(0,'#26406e');
+    grad.addColorStop(1,'#152038');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, top, W, bot-top);
+    sctx.strokeStyle = 'rgba(120,180,255,0.35)';
+    sctx.lineWidth = 1;
+    sctx.beginPath(); sctx.moveTo(0,top); sctx.lineTo(W,top); sctx.stroke();
+    sctx.beginPath(); sctx.moveTo(0,bot); sctx.lineTo(W,bot); sctx.stroke();
+
+    // lipid wave texture
+    sctx.strokeStyle = 'rgba(140,190,255,0.12)';
+    for(let row=0; row<3; row++){
+      const ly = top + (bot-top)*(row+0.5)/3;
+      sctx.beginPath();
+      for(let x=0;x<=W;x+=6){
+        const y = ly + Math.sin(x*0.07+row)*2;
+        if(x===0) sctx.moveTo(x,y); else sctx.lineTo(x,y);
+      }
+      sctx.stroke();
+    }
+  }
+
+  function drawGPCR(g){
+    const top = H*REGION.membraneTop, bot = H*REGION.membraneBot;
+    const halfThickness = (bot-top)/2;
+    const midY = (top+bot)/2 + halfThickness;
+    const glowAlpha = 0.25+0.75*g.glow;
+
+    const gpcrImg = g.glow>0.3 ? IMAGES.gpcr_active : IMAGES.gpcr;
+    const usedImg = drawImg(gpcrImg, g.x, midY, (bot-top)*4.5,
+      g.glow>0.05 ? 'rgba(110,255,220,0.9)' : null, 14*g.glow);
+
+    if(!usedImg){
+      // vector fallback: 7-TM wavy snake
+      sctx.save();
+      sctx.translate(g.x, midY);
+      const segs = 7;
+      sctx.lineWidth = 4.2;
+      sctx.strokeStyle = g.glow>0.05
+        ? `rgba(120,255,230,${glowAlpha})`
+        : 'rgba(150,190,230,0.85)';
+      if(g.glow>0.05){
+        sctx.shadowColor = 'rgba(110,255,220,0.9)';
+        sctx.shadowBlur = 14*g.glow;
+      }
+      sctx.beginPath();
+      for(let i=0;i<=segs;i++){
+        const fx = (i/segs - 0.5) * 26;
+        const fy = Math.sin(i*1.4)* (bot-top)*0.42;
+        if(i===0) sctx.moveTo(fx,fy); else sctx.lineTo(fx,fy);
+      }
+      sctx.stroke();
+      sctx.shadowBlur = 0;
+      sctx.restore();
+    }
+
+    // G-protein heterotrimer beneath
+    const gp = g.gProtein;
+    const gy = bot + halfThickness + 16 + Math.sin(gp.bobPhase)*2;
+    if(gp.attached){
+      drawBeta(g.x+35, gy+15);
+      drawGamma(g.x+35, gy+15);
+      drawAlpha(g.x+7, gy+10, gp.nucleotide);
+    } else {
+      drawBeta(g.x+50, gy+15);
+      drawGamma(g.x+50, gy+15);
+    }
+  }
+
+  function drawAlpha(x,y,nucleotide){
+    const isGTP = nucleotide==='GTP';
+    const img = isGTP ? IMAGES.subunit_alpha_gtp : IMAGES.subunit_alpha;
+    if(drawImg(img, x, y, 150, isGTP ? 'rgba(110,255,220,0.9)' : null, 10)) return;
+    drawSubunit(x, y, 8, isGTP ? '#6dffb0' : '#5fa8ff', 'α', isGTP);
+    drawDot(x, y, 3, isGTP ? '#6dffb0' : '#3a4a66', isGTP);
+  }
+
+  function drawBeta(x,y){
+    if(drawImg(IMAGES.subunit_beta, x, y, 150)) return;
+    drawSubunit(x, y, 7, '#7fa8ff', 'β');
+  }
+
+  function drawGamma(x,y){
+    if(drawImg(IMAGES.subunit_gamma, x, y, 150)) return;
+    drawSubunit(x, y, 7, '#9d7fff', 'γ');
+  }
+
+  function drawSubunit(x,y,r,color,label,glow){
+    sctx.save();
+    if(glow){ sctx.shadowColor = color; sctx.shadowBlur = 12; }
+    sctx.beginPath();
+    sctx.arc(x,y,r,0,Math.PI*2);
+    sctx.fillStyle = color;
+    sctx.globalAlpha = 0.9;
+    sctx.fill();
+    sctx.shadowBlur = 0;
+    sctx.globalAlpha = 1;
+    sctx.fillStyle = '#06101f';
+    sctx.font = '8px Segoe UI';
+    sctx.textAlign='center'; sctx.textBaseline='middle';
+    sctx.fillText(label, x, y+0.5);
+    sctx.restore();
+  }
+
+  function drawDot(x,y,r,color,glow){
+    sctx.save();
+    if(glow){ sctx.shadowColor=color; sctx.shadowBlur=10; }
+    sctx.beginPath();
+    sctx.arc(x,y,r,0,Math.PI*2);
+    sctx.fillStyle = color;
+    sctx.fill();
+    sctx.restore();
+  }
+
+  function drawAC(){
+    const top = H*REGION.membraneTop, bot = H*REGION.membraneBot;
+    const midY = (top+bot)/1.5;
+    const acImg = AC.glow>0.3 ? IMAGES.adenylate_cyclase_active : IMAGES.adenylate_cyclase;
+    const usedImg = drawImg(acImg, AC.x-15, midY, (bot-top)*6,
+      AC.glow>0.05 ? 'rgba(255,140,40,0.9)' : null, 18*AC.glow);
+
+    if(!usedImg){
+      sctx.save();
+      sctx.translate(AC.x, midY);
+      const c = AC.glow>0.05 ? `rgba(255,157,61,${0.35+0.65*AC.glow})` : 'rgba(170,150,200,0.7)';
+      if(AC.glow>0.05){ sctx.shadowColor='rgba(255,140,40,0.9)'; sctx.shadowBlur = 18*AC.glow; }
+      sctx.fillStyle = c;
+      // blocky enzyme shape spanning membrane
+      sctx.beginPath();
+      sctx.moveTo(-22, -(bot-top)*0.55);
+      sctx.lineTo(22, -(bot-top)*0.55);
+      sctx.lineTo(16, (bot-top)*0.7);
+      sctx.lineTo(-16, (bot-top)*0.7);
+      sctx.closePath();
+      sctx.fill();
+      sctx.shadowBlur = 0;
+      sctx.restore();
+    }
+
+    sctx.save();
+    sctx.fillStyle = 'rgba(220,230,255,0.85)';
+    sctx.font = '10px Segoe UI';
+    sctx.textAlign = 'center';
+    sctx.fillText('Adenylate Cyclase', AC.x-15, bot+34+ (gpcrs.length?0:0)+ (bot-top)*0 + 30 - 5);
+    sctx.restore();
+  }
+
+  function drawFreeAlpha(a){
+    drawAlpha(a.x, a.y, 'GTP');
+  }
+
+  function drawLigands(){
+    for(const l of ligands){
+      if(drawImg(IMAGES.ligand_glucagon, l.x, l.y, 16, '#ffd76a', 8)) continue;
+      sctx.save();
+      sctx.beginPath();
+      sctx.fillStyle = '#ffd76a';
+      sctx.shadowColor = '#ffd76a';
+      sctx.shadowBlur = 8;
+      sctx.arc(l.x,l.y,3.4,0,Math.PI*2);
+      sctx.fill();
+      sctx.restore();
+    }
+  }
+
+  function drawCamp(){
+    for(const c of camp){
+      if(drawImg(IMAGES.camp, c.x, c.y, 9, '#7fd4ff', 5)) continue;
+      sctx.save();
+      sctx.fillStyle = '#7fd4ff';
+      sctx.shadowColor = '#7fd4ff';
+      sctx.shadowBlur = 5;
+      sctx.beginPath();
+      sctx.arc(c.x,c.y,2.1,0,Math.PI*2);
+      sctx.fill();
+      sctx.restore();
+    }
+  }
+
+  function drawPDE(){
+    for(const p of pdes){
+      if(drawImg(IMAGES.pde, p.x, p.y, 36)) continue;
+      sctx.save();
+      sctx.fillStyle = 'rgba(255,255,255,0.18)';
+      sctx.beginPath();
+      sctx.arc(p.x,p.y,3.2,0,Math.PI*2);
+      sctx.fill();
+      sctx.restore();
+    }
+  }
+
+  function drawPKA(pk){
+    if(pk.broken) return;
+    const a = clamp(0.5 + pk.hits*0.12, 0.5, 1);
+    sctx.save();
+    sctx.globalAlpha = a;
+    // 2 regulatory + 2 catalytic clustered
+    //  function drawImg(img, cx, cy, targetH, glowColor, glowBlur, flipX, angle)
+    if(!drawImg(IMAGES.pka_regulatory, pk.x-9, pk.y-7, 72)) drawSubunit(pk.x-9, pk.y-7, 7, '#5d6fa0', 'R');
+    if(!drawImg(IMAGES.pka_regulatory, pk.x+9, pk.y-7, 72, null, null, true)) drawSubunit(pk.x+9, pk.y-7, 7, '#5d6fa0', 'R');
+    if(!drawImg(IMAGES.pka_catalytic, pk.x-8, pk.y-6, 72, null, null, null, Math.PI)) drawSubunit(pk.x-9, pk.y+7, 7, '#ff7fc0', 'C');
+    if(!drawImg(IMAGES.pka_catalytic, pk.x+8, pk.y-6, 72, null, null, true, Math.PI)) drawSubunit(pk.x+9, pk.y+7, 7, '#ff7fc0', 'C');
+    sctx.restore();
+    // bound cAMP particles rendered docked on the regulatory subunits as they accumulate
+    const CAMP_SLOTS = [
+      {dx:-9, dy:-26}, {dx:9, dy:-26}, {dx:-16, dy:-16}, {dx:16, dy:-16}
+    ];
+    for(let i=0;i<pk.hits;i++){
+      const slot = CAMP_SLOTS[i];
+      const sx = pk.x+slot.dx, sy = pk.y+slot.dy;
+      if(drawImg(IMAGES.camp, sx, sy, 14, '#7fd4ff', 6)) continue;
+      sctx.save();
+      sctx.fillStyle = '#7fd4ff';
+      sctx.shadowColor = '#7fd4ff';
+      sctx.shadowBlur = 6;
+      sctx.beginPath();
+      sctx.arc(sx,sy,3,0,Math.PI*2);
+      sctx.fill();
+      sctx.restore();
+    }
+  }
+
+  function drawCatPKA(c){
+    if(drawImg(IMAGES.pka_catalytic_active, c.x, c.y, 72, '#ff3dc4', 10, null, Math.PI/2)) return;
+    drawSubunit(c.x, c.y, 8, '#ff3dc4', 'C', true);
+  }
+
+  function drawNucleus(){
+    const top = H*REGION.nucleusTop;
+    sctx.save();
+    const grad = sctx.createRadialGradient(W/2, top+ (H-top)*0.4, 10, W/2, top+(H-top)*0.4, W*0.6);
+    const glowBoost = climaxActive ? 0.5 : 0;
+    grad.addColorStop(0, `rgba(90,130,220,${0.45+glowBoost})`);
+    grad.addColorStop(1, 'rgba(10,20,40,0.05)');
+    sctx.fillStyle = grad;
+    sctx.beginPath();
+    sctx.moveTo(0, top);
+    sctx.quadraticCurveTo(W/2, top - 26, W, top);
+    sctx.lineTo(W, H);
+    sctx.lineTo(0,H);
+    sctx.closePath();
+    sctx.fill();
+
+    sctx.strokeStyle = 'rgba(140,190,255,0.3)';
+    sctx.beginPath();
+    sctx.moveTo(0, top);
+    sctx.quadraticCurveTo(W/2, top-26, W, top);
+    sctx.stroke();
+
+    sctx.fillStyle='rgba(210,225,255,0.55)';
+    sctx.font='11px Segoe UI';
+    sctx.textAlign='center';
+    sctx.fillText('NUCLEUS', W/2, top+18);
+    sctx.restore();
+  }
+
+  function drawStrands(){
+    sctx.save();
+    for(const s of strands){
+      sctx.beginPath();
+      sctx.strokeStyle = `rgba(255,215,106,${clamp(s.life,0,1)})`;
+      sctx.shadowColor = '#ffd76a';
+      sctx.shadowBlur = 8;
+      sctx.lineWidth = 2;
+      for(let i=0;i<=20;i++){
+        const yy = s.y - i*4;
+        const xx = s.x + Math.sin(yy*s.freq + s.phaseOff)*s.amp;
+        if(i===0) sctx.moveTo(xx,yy); else sctx.lineTo(xx,yy);
+      }
+      sctx.stroke();
+    }
+    sctx.restore();
+  }
+
+  function drawScene(){
+    sctx.clearRect(0,0,W,H);
+    // cytoplasm bg
+    sctx.fillStyle = '#070c18';
+    sctx.fillRect(0, H*REGION.cytoTop, W, H*(REGION.nucleusTop-REGION.cytoTop));
+    sctx.fillStyle = '#040810';
+    sctx.fillRect(0,0,W,H*REGION.membraneTop);
+
+    drawNucleus();
+    drawPDE();
+    for(const pk of pkas) drawPKA(pk);
+    drawCamp();
+    for(const c of catPKAs) drawCatPKA(c);
+    drawStrands();
+
+    drawMembrane();
+    for(const g of gpcrs) drawGPCR(g);
+    drawAC();
+    for(const a of freeAlphas) drawFreeAlpha(a);
+    drawLigands();
+  }
+
+  function drawChart(){
+    cctx.clearRect(0,0,CW,CH);
+    cctx.fillStyle = 'rgba(0,0,0,0)';
+    const pad = {l:46,r:14,t:14,b:22};
+    const plotW = CW-pad.l-pad.r, plotH = CH-pad.t-pad.b;
+
+    // grid
+    cctx.strokeStyle = 'rgba(120,160,210,0.12)';
+    cctx.lineWidth = 1;
+    for(let i=0;i<=4;i++){
+      const y = pad.t + plotH*i/4;
+      cctx.beginPath(); cctx.moveTo(pad.l,y); cctx.lineTo(CW-pad.r,y); cctx.stroke();
+    }
+    cctx.strokeStyle = 'rgba(120,160,210,0.3)';
+    cctx.beginPath();
+    cctx.moveTo(pad.l,pad.t); cctx.lineTo(pad.l,CH-pad.b); cctx.lineTo(CW-pad.r,CH-pad.b);
+    cctx.stroke();
+
+    const maxV = Math.max(20, ...history, 1);
+    cctx.fillStyle='rgba(180,200,230,0.7)';
+    cctx.font='10px Segoe UI';
+    cctx.textAlign='right';
+    for(let i=0;i<=4;i++){
+      const v = Math.round(maxV*(4-i)/4);
+      cctx.fillText(v, pad.l-6, pad.t+plotH*i/4+3);
+    }
+    cctx.textAlign='center';
+    cctx.fillText('Time →', pad.l+plotW/2, CH-4);
+    cctx.save();
+    cctx.translate(12, pad.t+plotH/2);
+    cctx.rotate(-Math.PI/2);
+    cctx.fillText('[cAMP] (a.u.)', 0,0);
+    cctx.restore();
+
+    if(history.length>1){
+      cctx.beginPath();
+      cctx.strokeStyle = '#7fd4ff';
+      cctx.shadowColor = '#7fd4ff';
+      cctx.shadowBlur = 6;
+      cctx.lineWidth = 1.8;
+      for(let i=0;i<history.length;i++){
+        const x = pad.l + plotW * (i/(HISTORY_MAX-1));
+        const y = pad.t + plotH * (1 - history[i]/maxV);
+        if(i===0) cctx.moveTo(x,y); else cctx.lineTo(x,y);
+      }
+      cctx.stroke();
+      cctx.shadowBlur = 0;
+
+      // fill under curve
+      cctx.lineTo(pad.l+plotW*((history.length-1)/(HISTORY_MAX-1)), CH-pad.b);
+      cctx.lineTo(pad.l, CH-pad.b);
+      cctx.closePath();
+      cctx.fillStyle = 'rgba(127,212,255,0.08)';
+      cctx.fill();
+    }
+  }
+
+  // =====================================================================
+  // Main loop
+  // =====================================================================
+  let last = performance.now();
+  function frame(now){
+    const dt = Math.min(33, now-last);
+    last = now;
+    update(dt);
+    drawScene();
+    drawChart();
+    requestAnimationFrame(frame);
+  }
+
+  function start(){
+    resize();
+    resetAll();
+    requestAnimationFrame(frame);
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
